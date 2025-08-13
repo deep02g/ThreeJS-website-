@@ -6,7 +6,7 @@ export function initLazyLoad(){
       if(e.isIntersecting && !scrollerLoaded){
         scrollerLoaded = true;
         try {
-          await import('/src/demo.js');
+          await import('/src/demo/index.js');
         } catch (err){
           console.error('Failed to load scroller', err);
         }
