@@ -5,7 +5,8 @@ import * as THREE from "three";
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { palettes, sinPalettes, demoCustomSinPalette } from "./palettes.js";
-import { getPaletteFromParams, mix, setupControls } from "./utils.js";
+import { mix } from "../core/utils.js";
+import { getPaletteFromParams, setupControls } from "./controls.js";
 import  lerpy  from "lerpy"
 // Colors 
 let paletteKey = getPaletteFromParams("blue")
