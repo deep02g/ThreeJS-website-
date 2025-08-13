@@ -1,6 +1,5 @@
 
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 
 export class Rendering {
   constructor(canvas, palette) {
@@ -84,6 +83,3 @@ export class Rendering {
     this.vp.scene = this.getViewSizeAtDepth();
   }
 }
-
-// let a = new Demo(GL.canvas);
-// a.init();
