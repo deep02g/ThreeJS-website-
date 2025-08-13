@@ -1,4 +1,5 @@
 // landing-entry.js — landing shader + transition + lazy-load scroller
+import * as THREE from 'three';
 const ENABLE_GRAIN = true;
 const WORD = 'POLYCARBON';
 const PANEL = getComputedStyle(document.documentElement).getPropertyValue('--panel').trim() || '#0c0d13';
@@ -8,22 +9,12 @@ function smoothstep(edge0, edge1, x){
   return t * t * (3 - 2 * t);
 }
 
-// --- WebGL landing shader ---
+// --- Three.js landing shader ---
 const glCanvas = document.getElementById('gl');
-const gl = glCanvas.getContext('webgl', { antialias: true, alpha: true });
-if(!gl){ console.warn('WebGL not supported'); }
-
-function resizeGL(){
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const cssW = glCanvas.clientWidth || window.innerWidth;
-  const cssH = glCanvas.clientHeight || window.innerHeight;
-  const w = Math.floor(cssW * dpr), h = Math.floor(cssH * dpr);
-  if(glCanvas.width !== w || glCanvas.height !== h){ glCanvas.width = w; glCanvas.height = h; }
-  gl.viewport(0,0,gl.drawingBufferWidth, gl.drawingBufferHeight);
-}
-
-function createShader(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){ console.error(gl.getShaderInfoLog(s)); throw new Error('Shader compile failed'); } return s; }
-function createProgram(vsSrc, fsSrc){ const p = gl.createProgram(); gl.attachShader(p, createShader(gl.VERTEX_SHADER, vsSrc)); gl.attachShader(p, createShader(gl.FRAGMENT_SHADER, fsSrc)); gl.linkProgram(p); if(!gl.getProgramParameter(p, gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(p)); throw new Error('Program link failed'); } return p; }
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
+renderer.setClearColor(0x000000, 0);
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 const vertSrc = `attribute vec2 uv; attribute vec3 position; varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position * 2.0, 1.0); }`;
 const fragSrc = `precision highp float; varying vec2 vUv;
@@ -44,64 +35,55 @@ void main(){
   gl_FragColor = vec4(color, 1.0);
 }`;
 
-const prog = gl ? createProgram(vertSrc, fragSrc) : null;
-if (gl) gl.useProgram(prog);
+const current = { c0:[0.35,0.10,0.10], c1:[0.65,0.30,0.35], c2:[0.90,0.85,0.80], c3:[0.05,0.05,0.00] };
+const target  = { c0:[0.06,0.08,0.20], c1:[0.25,0.30,0.55], c2:[0.90,0.90,0.90], c3:[0.00,0.33,0.67] };
+const uniforms = {
+  c0: { value: new THREE.Vector3(...current.c0) },
+  c1: { value: new THREE.Vector3(...current.c1) },
+  c2: { value: new THREE.Vector3(...current.c2) },
+  c3: { value: new THREE.Vector3(...current.c3) },
+  c0Target: { value: new THREE.Vector3(...target.c0) },
+  c1Target: { value: new THREE.Vector3(...target.c1) },
+  c2Target: { value: new THREE.Vector3(...target.c2) },
+  c3Target: { value: new THREE.Vector3(...target.c3) },
+  uProgress: { value: 0 },
+  uTime: { value: 0 },
+  uBG: { value: new THREE.Vector3(0.02,0.02,0.03) },
+  uAspect: { value: new THREE.Vector2(1,1) },
+  uVisibility: { value: 1.0 }
+};
 
-// geometry: fullscreen quad
-if (gl){
-  const positions = new Float32Array([-0.5,-0.5,0,  0.5,-0.5,0,  0.5,0.5,0,  -0.5,0.5,0]);
-  const uvs       = new Float32Array([0,0, 1,0, 1,1, 0,1]);
-  const indices   = new Uint16Array([0,1,2, 0,2,3]);
-  function makeVBO(data, loc, size){ const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); return buf; }
-  const aPos = gl.getAttribLocation(prog, 'position');
-  const aUv  = gl.getAttribLocation(prog, 'uv');
-  makeVBO(positions, aPos, 3); makeVBO(uvs, aUv, 2);
-  const ibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+const material = new THREE.RawShaderMaterial({ vertexShader: vertSrc, fragmentShader: fragSrc, uniforms });
+const geometry = new THREE.PlaneGeometry(1, 1);
+const mesh = new THREE.Mesh(geometry, material);
+scene.add(mesh);
 
-  // uniforms
-  const uTime   = gl.getUniformLocation(prog, 'uTime');
-  const uAspect = gl.getUniformLocation(prog, 'uAspect');
-  const uBG     = gl.getUniformLocation(prog, 'uBG');
-  const uVis    = gl.getUniformLocation(prog, 'uVisibility');
-  const uProg   = gl.getUniformLocation(prog, 'uProgress');
-  const c0 = gl.getUniformLocation(prog, 'c0');
-  const c1 = gl.getUniformLocation(prog, 'c1');
-  const c2 = gl.getUniformLocation(prog, 'c2');
-  const c3 = gl.getUniformLocation(prog, 'c3');
-  const c0t = gl.getUniformLocation(prog, 'c0Target');
-  const c1t = gl.getUniformLocation(prog, 'c1Target');
-  const c2t = gl.getUniformLocation(prog, 'c2Target');
-  const c3t = gl.getUniformLocation(prog, 'c3Target');
-
-  const current = { c0:[0.35,0.10,0.10], c1:[0.65,0.30,0.35], c2:[0.90,0.85,0.80], c3:[0.05,0.05,0.00] };
-  const target  = { c0:[0.06,0.08,0.20], c1:[0.25,0.30,0.55], c2:[0.90,0.90,0.90], c3:[0.00,0.33,0.67] };
-  gl.uniform3fv(c0,  new Float32Array(current.c0));
-  gl.uniform3fv(c1,  new Float32Array(current.c1));
-  gl.uniform3fv(c2,  new Float32Array(current.c2));
-  gl.uniform3fv(c3,  new Float32Array(current.c3));
-  gl.uniform3fv(c0t, new Float32Array(target.c0));
-  gl.uniform3fv(c1t, new Float32Array(target.c1));
-  gl.uniform3fv(c2t, new Float32Array(target.c2));
-  gl.uniform3fv(c3t, new Float32Array(target.c3));
-  gl.uniform3fv(uBG,  new Float32Array([0.02,0.02,0.03]));
-  gl.uniform1f(uVis,  1.0);
-
-  function setAspect(){ const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight; const aspect = [Math.max(h/w,1), Math.max(w/h,1)]; gl.uniform2fv(uAspect, new Float32Array(aspect)); }
-  window.addEventListener('resize', setAspect);
-
-  const start = performance.now();
-  function tick(now){
-    const t = (now - start) / 1000.0;
-    gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.uniform1f(uTime, t * 1000.0);
-    const progress = 0.5 + 0.5 * Math.sin(t * 0.25); gl.uniform1f(uProg, progress);
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-    requestAnimationFrame(tick);
-  }
-
-  function resizeAll(){ resizeGL(); setAspect(); }
-  window.addEventListener('resize', resizeAll); resizeAll(); requestAnimationFrame(tick);
+function setAspect(){
+  const w = renderer.domElement.width, h = renderer.domElement.height;
+  const aspect = [Math.max(h / w, 1), Math.max(w / h, 1)];
+  uniforms.uAspect.value.set(aspect[0], aspect[1]);
 }
+
+function resizeRenderer(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const cssW = glCanvas.clientWidth || window.innerWidth;
+  const cssH = glCanvas.clientHeight || window.innerHeight;
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(cssW, cssH, false);
+  setAspect();
+}
+window.addEventListener('resize', resizeRenderer);
+resizeRenderer();
+
+const clock = new THREE.Clock();
+function tick(){
+  const t = clock.getElapsedTime();
+  uniforms.uTime.value = t * 1000.0;
+  uniforms.uProgress.value = 0.5 + 0.5 * Math.sin(t * 0.25);
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
 
 // --- Grain overlay ---
 const grain = document.getElementById('grain');
