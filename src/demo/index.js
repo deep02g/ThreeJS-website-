@@ -1,11 +1,11 @@
 import "./style.css"
 import { gsap } from "gsap"
-import { Rendering } from "./rendering"
+import { Rendering } from "./rendering.js"
 import * as THREE from "three";
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
-import { palettes, sinPalettes, demoCustomSinPalette } from "./palettes";
-import { getPaletteFromParams, mix, setupControls } from "./utils";
+import { palettes, sinPalettes, demoCustomSinPalette } from "./palettes.js";
+import { getPaletteFromParams, mix, setupControls } from "./utils.js";
 import  lerpy  from "lerpy"
 // Colors 
 let paletteKey = getPaletteFromParams("blue")
