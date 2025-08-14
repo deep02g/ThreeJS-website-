@@ -36,7 +36,7 @@
 
     section.page { min-height: 100vh; display: grid; place-items: center; padding: 8vmin 5vmin; background: transparent; }
     .page-hero { background: transparent; }
-    .page-scroll { background: transparent; padding-top: clamp(140px, 20vh, 240px); }
+    .page-scroll { background: transparent; padding-top: 0; }
     .page.page-scroll { padding-left: 0; padding-right: 0; }
 
     .card {
